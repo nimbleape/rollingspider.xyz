@@ -345,14 +345,14 @@ App.init();
   function connect() {
     if (!App.isReady) {
       return setTimeout(function() {
-        connect();
+        //connect();
       }, 100);
     }
 
-    App.connectButton.click();
+    //App.connectButton.click();
   }
 
   setTimeout(function() {
-    connect();
+    //connect();
   }, 1000);
 })();

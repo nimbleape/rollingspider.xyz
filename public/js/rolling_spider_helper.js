@@ -3,7 +3,7 @@
 'use strict';
 
 function RollingSpiderHelper() {
-  this._manager = navigator.mozBluetooth;
+  this._manager = navigator.bluetooth;
   this._stateManager = new StateManager(this).start();
   this._isGattConnected = false;
   this._characteristics = {};
@@ -42,17 +42,16 @@ RollingSpiderHelper.prototype = evt({
       this.fire('connecting');
       return new Promise(function(resolve, reject) {
         that.fire('scanning-start');
-        that._startScan().then(function(/* handle */) {
-          that.fire('finding-device', {prefix: prefix, addresses: addresses});
-          return that._findDevice({deviceNamePrefix: prefix, addresses: addresses});
-        }).then(function(device) {
+        that._findDevice({deviceNamePrefix: prefix}).then(function(device) {
+          console.log('Found devices', device.uuid, device.paired, device.name);
           that.fire('scanning-stop');
-          device.gatt.onconnectionstatechanged =
-            that._gattConnectionStateChanged.bind(that);
-          that._stopScan();
+          //device.gatt.onconnectionstatechanged = that._gattConnectionStateChanged.bind(that);
           that.fire('gatt-connecting');
-          return that._gatt.connect();
-        }).then(function() {
+          return device.connectGATT();
+          //return device.connect();
+        }).then(function(server) {
+          console.log('server');
+          console.log(server);
           that.fire('discovering-services');
           return that._discoverServices();
         }).then(function() {
@@ -108,55 +107,23 @@ RollingSpiderHelper.prototype = evt({
     var addresses = options.addresses || [];
     var that = this;
     // XXX: we should set timeout for rejection
-    return new Promise(function(resolve, reject) {
-      var onGattDeviceFount = function(evt) {
-        var device = evt.device;
-        console.log('found ' + device.name + ': ' + device.address);
-        if(!that._isGattConnected &&
-            (device.name.startsWith(namePrefix) ||
-              addresses.indexOf(device.address) > -1)) {
-          that._device = device;
-          that._gatt = device.gatt;
-          resolve(evt.device);
-        }
-      };
-      that._leScanHandle.addEventListener('devicefound', onGattDeviceFount);
-    });
-  },
+    // return new Promise(function(resolve, reject) {
+    //   var onGattDeviceFount = function(evt) {
+    //     var device = evt.device;
+    //     console.log('found ' + device.name + ': ' + device.address);
+    //     if(!that._isGattConnected &&
+    //         (device.name.startsWith(namePrefix) ||
+    //           addresses.indexOf(device.address) > -1)) {
+    //       that._device = device;
+    //       that._gatt = device.gatt;
+    //       resolve(evt.device);
+    //     }
+    //   };
+    //   that._leScanHandle.addEventListener('devicefound', onGattDeviceFount);
 
-  _startScan: function StartScan(retry) {
-    var that = this;
-    if (!this._manager) {
-      return Promise.reject('No WebBluetooth support');
-    }
-    if (!this._manager.defaultAdapter) {
-      if (retry) {
-        return Promise.reject('No adapter found. Is bluetooth enabled?');
-      }
-      return new Promise(function(res, rej) {
-        setTimeout(function() {
-          that._startScan(true).then(res, rej);
-        }, 1000);
-      });
-    }
-    if (!this._adapter) {
-      this._adapter = this._manager.defaultAdapter;
-    }
-    return this._adapter.startLeScan([]).then(function onResolve(handle) {
-      that._leScanHandle = handle;
-      return Promise.resolve(handle);
-    }, function onReject(reason) {
-      return Promise.reject(reason);
-    });
-  },
+    //});
 
-  _stopScan: function StopScan(){
-    this._adapter.stopLeScan(this._leScanHandle).then(function onResolve() {
-      this._leScanHandle = null;
-      return Promise.resolve();
-    }.bind(this), function onReject(reason) {
-      return Promise.reject(reason);
-    }.bind(this));
+    return this._manager.requestDevice({filters: [{namePrefix: 'RS_'}]})
   },
 
   takeOff: function TakeOff() {
@@ -336,8 +303,8 @@ RollingSpiderHelper.prototype = evt({
 
   _discoverServices: function DiscoverServices() {
     var that = this;
-    this._gatt.oncharacteristicchanged =
-      this.onCharacteristicChanged.bind(this);
+    // this._gatt.oncharacteristicchanged =
+    //   this.onCharacteristicChanged.bind(this);
 
     function dumpServices(services){
       for(var i = 0; i < services.length; i++) {
