@@ -131,9 +131,15 @@ RollingSpiderHelper.prototype = evt({
 
       // 4, (byte)mSettingsCounter, 2, 0, 1, 0
       var buffer = new ArrayBuffer(6);
+
       var array = new Uint8Array(buffer);
+      console.log('buffer', buffer);
+
       array.set([4, this._settingsCounter++, 2, 0, 1, 0]);
-      characteristic.writeValue(buffer).then(function onResolve(){
+
+      console.log('take off buffer', buffer, array);
+
+      characteristic.writeValue(array).then(function onResolve(){
         console.log('takeoff success');
       }, function onReject(){
         console.log('takeoff failed');
@@ -149,7 +155,7 @@ RollingSpiderHelper.prototype = evt({
       var buffer = new ArrayBuffer(6);
       var array = new Uint8Array(buffer);
       array.set([4, this._settingsCounter++, 2, 0, 3, 0]);
-      characteristic.writeValue(buffer).then(function onResolve(){
+      characteristic.writeValue(array).then(function onResolve(){
         console.log('landing success');
       }, function onReject(){
         console.log('landing failed');
@@ -165,7 +171,7 @@ RollingSpiderHelper.prototype = evt({
       var buffer = new ArrayBuffer(10);
       var array = new Uint8Array(buffer);
       array.set([4, this._settingsCounter++, 2, 4, 0, 0, 2, 0, 0, 0]);
-      characteristic.writeValue(buffer).then(function onResolve(){
+      characteristic.writeValue(array).then(function onResolve(){
         console.log('frontFlip success');
       }, function onReject(){
         console.log('frontFlip failed');
@@ -180,7 +186,7 @@ RollingSpiderHelper.prototype = evt({
     var buffer = new ArrayBuffer(6);
     var array = new Uint8Array(buffer);
     array.set([4, this._emergencyCounter++, 2, 0, 4, 0]);
-    characteristic.writeValue(buffer).then(function onResolve(){
+    characteristic.writeValue(array).then(function onResolve(){
       console.log('emergencyStop success');
     }, function onReject(){
       console.log('emergencyStop failed');
@@ -209,7 +215,7 @@ RollingSpiderHelper.prototype = evt({
       0, 0, 0, 0,
       0, 0, 0, 0
     ]);
-    this._writeValuePromise(characteristic, buffer).then(function onResolve(){
+    this._writeValuePromise(characteristic, array).then(function onResolve(){
       // console.log('sendMotorCmd success');
       console.log('_sendMotorCmd: ' + on + ', ' + tilt + ', ' + forward + ', ' +
         turn + ', ' + up + ', ' + scale);
@@ -235,35 +241,31 @@ RollingSpiderHelper.prototype = evt({
   _enableNotification: function EnableNotification(characteristic) {
     var that = this;
     var success = false;
-    characteristic.startNotifications().then(function onResolve(){
-      console.log('enableNotification for ' +
-        characteristic.uuid + ' success');
-    }, function onReject(reason){
-      console.log('enableNotification for ' +
-        characteristic.uuid + ' failed: ' + reason);
-    });
-    console.log(characteristic.descriptors);
-    for (var i = 0; i < characteristic.descriptors.length; i++) {
-      var descriptor = characteristic.descriptors[i];
-      console.log('Descriptor CCCD uuid:' + descriptor.uuid);
-      console.log('Descriptor CCCD value:' + descriptor.value);
-      if (descriptor.uuid === Constants.CHARACTERISTICS.CCCD) {
-        console.log('CCCD found');
-        var buffer = new ArrayBuffer(2);
-        var array = new Uint8Array(buffer);
-        array.set([0x01, 0x00]);
-        that._writeValuePromise(descriptor, buffer);
-        success = true;
-      }
-    }
-    return success;
+    console.log('characteristic', characteristic);
+    console.log('can we add a notify to this characteristic?', characteristic.properties.notify);
+    console.log('returning for notification start promise');
+
+    return characteristic.startNotifications();
+
+    // console.log('Descriptor uuid:' + characteristic.uuid);
+    // console.log('Descriptor value:' + characteristic.value);
+
+    // if (characteristic.uuid === Constants.CHARACTERISTICS.CCCD) {
+    //   console.log('CCCD found');
+    //   var buffer = new ArrayBuffer(2);
+    //   var array = new Uint8Array(buffer);
+    //   array.set([0x01, 0x00]);
+    //   that._writeValuePromise(characteristic, buffer);
+    //   success = true;
+    // }
+    // return success;
   },
 
   onCharacteristicChanged: function OnCharacteristicChanged(evt) {
+    console.log('got an event from a characteristic', evt);
     var characteristic = evt.characteristic;
     var value = characteristic.value;
-    console.log('The value of characteristic (uuid:' +
-      characteristic.uuid + ') changed to ' + SharedUtils.ab2str(value));
+    console.log('The value of characteristic (uuid:' + characteristic.uuid + ') changed to ' + SharedUtils.ab2str(value));
 
     switch(characteristic.uuid){
       case Constants.CHARACTERISTICS.FB0E:
@@ -304,27 +306,60 @@ RollingSpiderHelper.prototype = evt({
 
     function dumpCharacteristics(){
 
+      var arr = [];
+
       var sequence = Promise.resolve();
 
-      return sequence.then(function () {
-        Object.keys(Constants.SERVICES).forEach(function(i){
-          return sequence.then(function(){
+      // var promise = sequence.then(function () {
+      //   Object.keys(Constants.SERVICES).forEach(function(i){
+      //     return sequence.then(function(){
+      //       //get the service
+      //       return that._gatt.getPrimaryService(i);
+      //     }).then(function(service){
+      //       //then use it to access all the characteristics which are associated with that service
+      //       Object.keys(Constants.SERVICES[i]).forEach(function(key){
+      //         return sequence.then(function() {
+      //           return service.getCharacteristic(Constants.CHARACTERISTICS[Constants.SERVICES[i][key]]);
+      //         }).then(function(characteristic){
+      //           console.log('got characteristic', Constants.CHARACTERISTICS[Constants.SERVICES[i][key]], characteristic);
+      //           var uuid = characteristic.uuid;
+      //           that._characteristics[uuid] = characteristic;
+      //         });
+      //       });
+      //     })
+      //   });
+      // });
+
+      return new Promise(function(resolve, reject){
+
+        Object.keys(Constants.SERVICES).forEach(function(i, loo){
+          sequence.then(function(){
             //get the service
             return that._gatt.getPrimaryService(i);
           }).then(function(service){
             //then use it to access all the characteristics which are associated with that service
-            Object.keys(Constants.SERVICES[i]).forEach(function(key){
+            Object.keys(Constants.SERVICES[i]).forEach(function(key, loop){
               return sequence.then(function() {
                 return service.getCharacteristic(Constants.CHARACTERISTICS[Constants.SERVICES[i][key]]);
               }).then(function(characteristic){
                 console.log('got characteristic', Constants.CHARACTERISTICS[Constants.SERVICES[i][key]], characteristic);
                 var uuid = characteristic.uuid;
                 that._characteristics[uuid] = characteristic;
-              });
+                characteristic.oncharacteristicvaluechanged = that.onCharacteristicChanged.bind(that);
+
+                console.log(Object.keys(Constants.SERVICES).length, loo, Object.keys(Constants.SERVICES[i]).length, loop);
+
+                if(loo+1 === Object.keys(Constants.SERVICES).length && loop+1 === Object.keys(Constants.SERVICES[i]).length){
+                  resolve();
+                }
+
+              })
             });
           })
         });
-      });
+
+
+      })
 
 
       // for(var i = 0; i < services.length; i++) {
@@ -349,27 +384,33 @@ RollingSpiderHelper.prototype = evt({
       function wrapper_discoverServices(){
 
           dumpCharacteristics().then(function(){
-            console.log('finished?');
-          });
 
-          if(that._checkChar()){
-            var notificationSuccess_FB0E = that._enableNotification(
-              that._characteristics[Constants.CHARACTERISTICS.FB0E]);
-            var notificationSuccess_FB0F = that._enableNotification(
-              that._characteristics[Constants.CHARACTERISTICS.FB0F]);
-            if(!notificationSuccess_FB0E || !notificationSuccess_FB0F){
+            if(that._checkChar()){
+              that._enableNotification(that._characteristics[Constants.CHARACTERISTICS.FB0E]).then(function(){
+                return that._enableNotification(that._characteristics[Constants.CHARACTERISTICS.FB0F]);
+              }).then(function(){
+                console.log('discover services success');
+                resolve();
+              }).catch(function(reason){
+                //retry();
+                console.log('fail?');
+              });
+
+            //   console.log(notificationSuccess_FB0E, notificationSuccess_FB0F);
+            //   if(!notificationSuccess_FB0E || !notificationSuccess_FB0F){
+
+            //   } else {
+            //     console.log('discover services success');
+            //     resolve();
+            //   }
+            // } else {
               //retry();
-            } else {
-              console.log('discover services success');
-              resolve();
             }
-          } else {
-            //retry();
-          }
-        // }, function onReject(reason){
-        //   console.log('discoverServices reject: [' + reason + ']');
-        //   reject();
-        // });
+          // }, function onReject(reason){
+          //   console.log('discoverServices reject: [' + reason + ']');
+          //   reject();
+          // });
+        });
       }
 
       wrapper_discoverServices();
