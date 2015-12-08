@@ -45,13 +45,11 @@ RollingSpiderHelper.prototype = evt({
         that._findDevice({deviceNamePrefix: prefix}).then(function(device) {
           console.log('Found devices', device.uuid, device.paired, device.name);
           that.fire('scanning-stop');
-          //device.gatt.onconnectionstatechanged = that._gattConnectionStateChanged.bind(that);
           that.fire('gatt-connecting');
           return device.connectGATT();
-          //return device.connect();
         }).then(function(server) {
-          console.log('server');
-          console.log(server);
+          that._gatt = server
+          console.log('server', server);
           that.fire('discovering-services');
           return that._discoverServices();
         }).then(function() {
@@ -303,33 +301,56 @@ RollingSpiderHelper.prototype = evt({
 
   _discoverServices: function DiscoverServices() {
     var that = this;
-    // this._gatt.oncharacteristicchanged =
-    //   this.onCharacteristicChanged.bind(this);
 
-    function dumpServices(services){
-      for(var i = 0; i < services.length; i++) {
-        var characteristics = services[i].characteristics;
-        console.log('service[' + i + ']' + characteristics.length +
-          'characteristics in total');
-        for(var j = 0; j < characteristics.length; j++) {
-          var characteristic = characteristics[j];
-          var uuid = characteristic.uuid;
-          that._characteristics[uuid] = characteristic;
-          console.log(uuid);
-        }
-      }
+    function dumpCharacteristics(){
+
+      var sequence = Promise.resolve();
+
+      return sequence.then(function () {
+        Object.keys(Constants.SERVICES).forEach(function(i){
+          return sequence.then(function(){
+            //get the service
+            return that._gatt.getPrimaryService(i);
+          }).then(function(service){
+            //then use it to access all the characteristics which are associated with that service
+            Object.keys(Constants.SERVICES[i]).forEach(function(key){
+              return sequence.then(function() {
+                return service.getCharacteristic(Constants.CHARACTERISTICS[Constants.SERVICES[i][key]]);
+              }).then(function(characteristic){
+                console.log('got characteristic', Constants.CHARACTERISTICS[Constants.SERVICES[i][key]], characteristic);
+                var uuid = characteristic.uuid;
+                that._characteristics[uuid] = characteristic;
+              });
+            });
+          })
+        });
+      });
+
+
+      // for(var i = 0; i < services.length; i++) {
+      //   var characteristics = services[i].characteristics;
+      //   console.log('service[' + i + ']' + characteristics.length +
+      //     'characteristics in total');
+      //   for(var j = 0; j < characteristics.length; j++) {
+      //     var characteristic = characteristics[j];
+      //     var uuid = characteristic.uuid;
+      //     that._characteristics[uuid] = characteristic;
+      //     console.log(uuid);
+      //   }
+      // }
     }
 
     return new Promise(function (resolve, reject){
-      function retry() {
-        console.log('discover services retry...');
-        setTimeout(wrapper_discoverServices, 100);
-      }
+      // function retry() {
+      //   console.log('discover services retry...');
+      //   setTimeout(wrapper_discoverServices, 100);
+      // }
 
       function wrapper_discoverServices(){
-        that._gatt.discoverServices().then(function onResolve(){
-          var services = that._gatt.services;
-          dumpServices(services);
+
+          dumpCharacteristics().then(function(){
+            console.log('finished?');
+          });
 
           if(that._checkChar()){
             var notificationSuccess_FB0E = that._enableNotification(
@@ -337,18 +358,18 @@ RollingSpiderHelper.prototype = evt({
             var notificationSuccess_FB0F = that._enableNotification(
               that._characteristics[Constants.CHARACTERISTICS.FB0F]);
             if(!notificationSuccess_FB0E || !notificationSuccess_FB0F){
-              retry();
+              //retry();
             } else {
               console.log('discover services success');
               resolve();
             }
           } else {
-            retry();
+            //retry();
           }
-        }, function onReject(reason){
-          console.log('discoverServices reject: [' + reason + ']');
-          reject();
-        });
+        // }, function onReject(reason){
+        //   console.log('discoverServices reject: [' + reason + ']');
+        //   reject();
+        // });
       }
 
       wrapper_discoverServices();
